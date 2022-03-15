@@ -1,9 +1,14 @@
 import asyncio
 from typing import Any, AsyncIterator, Dict, Optional, SupportsAbs, Tuple, Union
 
+from aiohttp import ClientSession
+from aiohttp.client_exceptions import ClientResponseError
 from airflow.triggers.base import BaseTrigger, TriggerEvent
 
-from astronomer.providers.google.cloud.hooks.bigquery import BigQueryHookAsync
+from astronomer.providers.google.cloud.hooks.bigquery import (
+    BigQueryHookAsync,
+    BigQueryTableHookAsync,
+)
 
 
 class BigQueryInsertJobTrigger(BaseTrigger):  # noqa: D101
@@ -378,3 +383,105 @@ class BigQueryValueCheckTrigger(BigQueryInsertJobTrigger):  # noqa: D101
                 self.log.exception("Exception occurred while checking for query completion")
                 yield TriggerEvent({"status": "error", "message": str(e)})
                 return
+
+
+class BigQueryTablePartitionExistenceTrigger(BaseTrigger):
+    """Trigger makes call to Google BigQuery and check whether Table Partition exists.
+
+    :param project_id: The Google cloud project in which to look for the table.
+            The connection supplied to the hook must provide
+            access to the specified project.
+    :param dataset_id: The name of the dataset in which to look for the table.
+        storage bucket.
+    :param table_id: The name of the table to check the existence of.
+    :param partition_id: The name of the partition to check the existence of.
+    :param poll_interval: polling period in seconds to check for file/folder
+    :param google_cloud_conn_id: reference to the Google Connection
+    :param hook_params: DIct object has delegate_to and impersonation_chain
+    """
+
+    def __init__(
+        self,
+        project_id: str,
+        dataset_id: str,
+        table_id: str,
+        partition_id: str,
+        google_cloud_conn_id: str,
+        hook_params: Dict[str, Any],
+        poll_interval: float,
+    ):
+        super().__init__()
+        self.project_id = project_id
+        self.dataset_id = dataset_id
+        self.table_id = table_id
+        self.partition_id = partition_id
+        self.google_cloud_conn_id = google_cloud_conn_id
+        self.hook_params = hook_params
+        self.poll_interval = poll_interval
+
+    def serialize(self) -> Tuple[str, Dict[str, Any]]:
+        """Serializes BigQueryTablePartitionExistenceTrigger arguments and classpath."""
+        return (
+            "astronomer.providers.google.cloud.triggers.bigquery.BigQueryTablePartitionExistenceTrigger",
+            {
+                "project_id": self.project_id,
+                "dataset_id": self.dataset_id,
+                "table_id": self.table_id,
+                "partition_id": self.partition_id,
+                "google_cloud_conn_id": self.google_cloud_conn_id,
+                "hook_params": self.hook_params,
+                "poll_interval": self.poll_interval,
+            },
+        )
+
+    def _get_async_hook(self) -> BigQueryTableHookAsync:
+        return BigQueryTableHookAsync(gcp_conn_id=self.google_cloud_conn_id)
+
+    async def run(self) -> AsyncIterator["TriggerEvent"]:  # type: ignore[override]
+        """Simple loop until the table exists in the google big query."""
+        while True:
+            try:
+                hook = self._get_async_hook()
+                response = await self._table_partition_exists(
+                    hook=hook,
+                    dataset=self.dataset_id,
+                    table_id=self.table_id,
+                    project_id=self.project_id,
+                    partition_id=self.partition_id,
+                )
+                if response:
+                    yield TriggerEvent({"status": "success", "message": "success"})
+                    return
+                await asyncio.sleep(self.poll_interval)
+            except Exception as e:
+                self.log.exception("Exception occurred while checking for Table partition existence")
+                yield TriggerEvent({"status": "error", "message": str(e)})
+                return
+
+    async def _table_partition_exists(
+        self, hook: BigQueryTableHookAsync, dataset: str, table_id: str, project_id: str, partition_id: str
+    ) -> bool:
+        """
+        Checks if the object in the bucket is updated.
+        :param hook: BigQueryTableHookAsync Hook class
+        :param dataset: The Google Cloud Storage bucket where the object is.
+        :param table_id: The name of the blob_name to check in the Google cloud.
+        :param project_id: context datetime to compare with blob object updated time
+        """
+        async with ClientSession() as session:
+            try:
+                client = await hook.get_table_client(
+                    dataset=dataset,
+                    table_id=table_id,
+                    project_id=project_id,
+                    partition_id=partition_id,
+                    session=session,
+                )
+                print("client dict", client.__dict__)
+                response = await client.get()
+                print("response", response)
+                return True if response else False
+            except ClientResponseError as err:
+                if err.status == 404:
+                    return False
+                raise err
