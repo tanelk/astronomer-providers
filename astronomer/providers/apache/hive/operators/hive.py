@@ -1,10 +1,14 @@
 import os
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
+from airflow import AirflowException
 from airflow.providers.apache.hive.operators.hive import HiveOperator
 from airflow.utils import operator_helpers
 from airflow.utils.operator_helpers import context_to_airflow_vars
+
+from astronomer.providers.apache.hive.hooks.hive import HiveCliHookAsync
+from astronomer.providers.apache.hive.triggers.hive import HiveTrigger
 
 if TYPE_CHECKING:
     from airflow.utils.context import Context
@@ -17,7 +21,7 @@ class HiveOperatorAsync(HiveOperator):
     :param hql: the hql to be executed. Note that you may also use
         a relative path from the dag file of a (template) hive
         script. (templated)
-    :param hive_cli_conn_id: Reference to the
+    :param hive_cli_conn_id: Connection to the hive cluster.
     :param hiveconfs: if defined, these key value pairs will be passed
         to hive as ``-hiveconf "key"="value"``
     :param hiveconf_jinja_translate: when True, hiveconf-type templating
@@ -36,15 +40,22 @@ class HiveOperatorAsync(HiveOperator):
         This can make monitoring easier.
     """
 
+    def get_hook(self) -> HiveCliHookAsync:
+        """Get Hive cli hook"""
+        return HiveCliHookAsync(hive_cli_conn_id=self.hive_cli_conn_id)
+
     def prepare_template(self) -> None:
-        """Prepare a hql query from the template"""
+        """Prepare the template for the beeline  hql command"""
         if self.hiveconf_jinja_translate:
             self.hql = re.sub(r"(\$\{(hiveconf:)?([ a-zA-Z0-9_]*)\})", r"{{ \g<3> }}", self.hql)
         if self.script_begin_tag and self.script_begin_tag in self.hql:
             self.hql = "\n".join(self.hql.split(self.script_begin_tag)[1:])
 
     def execute(self, context: "Context") -> None:
-        """Execute the hql query"""
+        """
+        Gets the  hive connection from hooks and execute the cursor async
+        Then use the cursor in trigger for polling for the executed queries.
+        """
         self.log.info("Executing: %s", self.hql)
         self.hook = self.get_hook()
 
@@ -64,17 +75,41 @@ class HiveOperatorAsync(HiveOperator):
             self.hiveconfs.update(context_to_airflow_vars(context))
 
         self.log.info("Passing HiveConf: %s", self.hiveconfs)
-        self.hook.run_cli(hql=self.hql, schema=self.schema, hive_conf=self.hiveconfs)
+        cursor = self.hook.get_hive_client().cursor()
+        cursor.execute(self.hql, async_=True)
+
+        self.defer(
+            timeout=self.execution_timeout,
+            trigger=HiveTrigger(
+                cursor=cursor,
+            ),
+            method_name="execute_complete",
+        )
+
+    def execute_complete(self, context: Dict[str, Any], event: Dict[str, str]) -> str:
+        """
+        Callback for when the trigger fires - returns immediately.
+        Relies on trigger to throw an exception, otherwise it assumes execution was
+        successful.
+        """
+        if event["status"] == "error":
+            raise AirflowException(event["message"])
+        self.log.info("Passing HiveConf: %s", self.hiveconfs)
+        self.log.info(event["message"])
+        return event["message"]
 
     def dry_run(self) -> None:
-        """Reset airflow environment variables to prevent existing env vars from impacting behavior."""
+        """
+        Reset airflow environment variables to prevent
+        existing env vars from impacting behavior.
+        """
         self.clear_airflow_vars()
 
         self.hook = self.get_hook()
         self.hook.test_hql(hql=self.hql)
 
     def on_kill(self) -> None:
-        """Kill the execution"""
+        """Kill the connection and stop the execution"""
         if self.hook:
             self.hook.kill()
 
