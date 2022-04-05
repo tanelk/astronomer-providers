@@ -6,6 +6,7 @@ from airflow import AirflowException
 from airflow.providers.apache.hive.operators.hive import HiveOperator
 from airflow.utils import operator_helpers
 from airflow.utils.operator_helpers import context_to_airflow_vars
+from TCLIService.ttypes import TOperationState
 
 from astronomer.providers.apache.hive.hooks.hive import HiveCliHookAsync
 from astronomer.providers.apache.hive.triggers.hive import HiveTrigger
@@ -75,8 +76,24 @@ class HiveOperatorAsync(HiveOperator):
             self.hiveconfs.update(context_to_airflow_vars(context))
 
         self.log.info("Passing HiveConf: %s", self.hiveconfs)
+
         cursor = self.hook.get_hive_client().cursor()
         cursor.execute(self.hql, async_=True)
+        try:
+            status = cursor.poll().operationState
+            while status in (TOperationState.INITIALIZED_STATE, TOperationState.RUNNING_STATE):
+                logs = cursor.fetch_logs()
+                for message in logs:
+                    print(message)
+
+                # If needed, an asynchronous query can be cancelled at any time with:
+                # cursor.cancel()
+
+                status = cursor.poll().operationState
+
+            print(cursor.fetchall())
+        except Exception as e:
+            print(e)
 
         self.defer(
             timeout=self.execution_timeout,
