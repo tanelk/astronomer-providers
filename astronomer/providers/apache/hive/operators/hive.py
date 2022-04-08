@@ -9,7 +9,8 @@ from airflow.utils.operator_helpers import context_to_airflow_vars
 from TCLIService.ttypes import TOperationState
 
 from astronomer.providers.apache.hive.hooks.hive import HiveCliHookAsync
-from astronomer.providers.apache.hive.triggers.hive import HiveTrigger
+
+# from astronomer.providers.apache.hive.triggers.hive import HiveTrigger
 
 if TYPE_CHECKING:
     from airflow.utils.context import Context

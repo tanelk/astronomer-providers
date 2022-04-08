@@ -23,12 +23,11 @@
 # --------------------------------------------------------------------------------
 # Load The Dependencies
 # --------------------------------------------------------------------------------
-"""
-This is an example dag for managing twitter data.
-"""
+"""This is an example dag for managing twitter data."""
 from datetime import date, datetime, timedelta
 
 from airflow import DAG
+
 # from airflow.providers.apache.hive.operators.hive import HiveOperator
 from astronomer.providers.apache.hive.operators.hive import HiveOperatorAsync
 
@@ -67,11 +66,11 @@ from astronomer.providers.apache.hive.operators.hive import HiveOperatorAsync
 
 
 with DAG(
-        dag_id='example_hive_dag',
-        schedule_interval="@daily",
-        start_date=datetime(2021, 1, 1),
-        tags=['example'],
-        catchup=False,
+    dag_id="example_hive_dag",
+    schedule_interval="@daily",
+    start_date=datetime(2021, 1, 1),
+    tags=["example"],
+    catchup=False,
 ) as dag:
     # fetch = fetch_tweets()
     # clean = clean_tweets()
@@ -88,8 +87,8 @@ with DAG(
     # and hence they are kept separated in this example.
     # --------------------------------------------------------------------------------
 
-    from_channels = ['fromTwitter_A', 'fromTwitter_B', 'fromTwitter_C', 'fromTwitter_D']
-    to_channels = ['toTwitter_A']  # 'toTwitter_B', 'toTwitter_C', 'toTwitter_D']
+    from_channels = ["fromTwitter_A", "fromTwitter_B", "fromTwitter_C", "fromTwitter_D"]
+    to_channels = ["toTwitter_A"]  # 'toTwitter_B', 'toTwitter_C', 'toTwitter_D']
     yesterday = date.today() - timedelta(days=1)
     dt = yesterday.strftime("%Y-%m-%d")
     # define where you want to store the tweets csv file in your local directory
@@ -110,9 +109,7 @@ with DAG(
         # [START create_hive]
         load_to_hive = HiveOperatorAsync(
             task_id=f"hive_query",
-            hql=(
-                f"""select * from employee_test"""
-            ),
+            hql=f"""select * from employee_test""",
         )
         # [END create_hive]
 
