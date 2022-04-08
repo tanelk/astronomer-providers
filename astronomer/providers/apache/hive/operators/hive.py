@@ -95,13 +95,13 @@ class HiveOperatorAsync(HiveOperator):
         except Exception as e:
             print(e)
 
-        self.defer(
-            timeout=self.execution_timeout,
-            trigger=HiveTrigger(
-                cursor=cursor,
-            ),
-            method_name="execute_complete",
-        )
+        # self.defer(
+        #     timeout=self.execution_timeout,
+        #     trigger=HiveTrigger(
+        #         cursor=cursor,
+        #     ),
+        #     method_name="execute_complete",
+        # )
 
     def execute_complete(self, context: Dict[str, Any], event: Dict[str, str]) -> str:
         """
