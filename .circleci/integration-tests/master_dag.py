@@ -6,8 +6,7 @@ from typing import List
 
 from airflow import DAG
 from airflow.contrib.operators.slack_webhook_operator import SlackWebhookOperator
-from airflow.models import DagRun
-from airflow.models.baseoperator import chain
+from airflow.models import DagBag, DagRun
 from airflow.operators.dummy import DummyOperator
 from airflow.operators.python import PythonOperator
 from airflow.operators.trigger_dagrun import TriggerDagRunOperator
@@ -52,28 +51,14 @@ def get_report(dag_run_ids: List[str]) -> None:
             logging.exception("Error occur while sending slack alert.")
 
 
-def prepare_dag_dependency(task_info, execution_time):
-    """Prepare list of TriggerDagRunOperator task and dags run ids for dags of same providers"""
-    _dag_run_ids = []
-    _task_list = []
-    for _example_dag in task_info:
-        _task_id = list(_example_dag.keys())[0]
+def get_dag_ids() -> List[str]:
+    """Return DAG id list of DagBag"""
+    dag_bag = DagBag()
+    return dag_bag.dag_ids
 
-        _run_id = f"{_task_id}_{_example_dag.get(_task_id)}_" + execution_time
-        _dag_run_ids.append(_run_id)
-        _task_list.append(
-            TriggerDagRunOperator(
-                task_id=_task_id,
-                trigger_dag_id=_example_dag.get(_task_id),
-                trigger_run_id=_run_id,
-                wait_for_completion=True,
-                reset_dag_run=True,
-                execution_date=execution_time,
-                allowed_states=["success", "failed", "skipped"],
-            )
-        )
-    return _task_list, _dag_run_ids
 
+# DAG registered here will not be part of integration test
+IGNORE_DAG = ["example_master_dag"]
 
 with DAG(
     dag_id="example_master_dag",
@@ -88,56 +73,23 @@ with DAG(
         python_callable=lambda: time.sleep(30),
     )
 
+    example_dag_list = []
     dag_run_ids = []
-    amazon_task_info = [
-        {"s3_sensor_dag": "example_s3_sensor"},
-        {"redshift_sql_dag": "example_async_redshift_sql"},
-        {"redshift_cluster_mgmt_dag": "example_async_redshift_cluster_management"},
-        {"emr_job_flow_sensor_dag": "example_emr_job_flow_sensor"},
-        {"emr_cluster_dag": "example_emr_step_sensor"},
-    ]
-    amazon_trigger_tasks, ids = prepare_dag_dependency(amazon_task_info, "{{ ds }}")
-    dag_run_ids.extend(ids)
-    chain(*amazon_trigger_tasks)
-
-    google_task_info = [
-        {"bigquery_dag": "example_async_bigquery_queries"},
-        {"gcs_sensor_dag": "example_async_gcs_sensors"},
-        {"big_query_sensor_dag": "example_bigquery_sensors"},
-        {"dataproc_dag": "example_gcp_dataproc"},
-    ]
-    google_trigger_tasks, ids = prepare_dag_dependency(google_task_info, "{{ ds }}")
-    dag_run_ids.extend(ids)
-    chain(*google_trigger_tasks)
-
-    core_task_info = [
-        {"external_task_wait_dag": "test_external_task_async_waits_for_me"},
-        {"external_task_dag": "test_external_task_async"},
-        {"file_sensor_dag": "example_async_file_sensor"},
-    ]
-    core_trigger_tasks, ids = prepare_dag_dependency(core_task_info, "{{ ds }}")
-    dag_run_ids.extend(ids)
-    chain(*core_trigger_tasks)
-
-    kubernetes_task_info = [{"kubernetes_pod_dag": "example_kubernetes_operator"}]
-    kubernetes_trigger_tasks, ids = prepare_dag_dependency(kubernetes_task_info, "{{ ds }}")
-    dag_run_ids.extend(ids)
-    chain(*kubernetes_trigger_tasks)
-
-    databricks_task_info = [{"databricks_dag": "example_async_databricks"}]
-    databricks_trigger_tasks, ids = prepare_dag_dependency(databricks_task_info, "{{ ds }}")
-    dag_run_ids.extend(ids)
-    chain(*databricks_trigger_tasks)
-
-    http_task_info = [{"http_dag": "example_async_http_sensor"}]
-    http_trigger_tasks, ids = prepare_dag_dependency(http_task_info, "{{ ds }}")
-    dag_run_ids.extend(ids)
-    chain(*http_trigger_tasks)
-
-    snowflake_task_info = [{"snowflake_dag": "example_snowflake"}]
-    snowflake_trigger_tasks, ids = prepare_dag_dependency(snowflake_task_info, "{{ ds }}")
-    dag_run_ids.extend(ids)
-    chain(*snowflake_trigger_tasks)
+    for _dag_id in get_dag_ids():
+        if _dag_id not in IGNORE_DAG:
+            _run_id = f"{_dag_id}_" + "{{ ds }}"
+            dag_run_ids.append(_run_id)
+            example_dag_list.append(
+                TriggerDagRunOperator(
+                    task_id=_dag_id,
+                    trigger_dag_id=_dag_id,
+                    trigger_run_id=_run_id,
+                    wait_for_completion=True,
+                    reset_dag_run=True,
+                    execution_date="{{ ds }}",
+                    allowed_states=["success", "failed", "skipped"],
+                )
+            )
 
     report = PythonOperator(
         task_id="get_report",
@@ -151,25 +103,5 @@ with DAG(
         trigger_rule="all_success",
     )
 
-    start >> [
-        amazon_trigger_tasks[0],
-        google_trigger_tasks[0],
-        core_trigger_tasks[0],
-        kubernetes_trigger_tasks[0],
-        databricks_trigger_tasks[0],
-        http_trigger_tasks[0],
-        snowflake_trigger_tasks[0],
-    ]
-
-    last_task = [
-        amazon_trigger_tasks[-1],
-        google_trigger_tasks[-1],
-        core_trigger_tasks[-1],
-        kubernetes_trigger_tasks[-1],
-        databricks_trigger_tasks[-1],
-        http_trigger_tasks[-1],
-        snowflake_trigger_tasks[-1],
-    ]
-
-    last_task >> end
-    last_task >> report
+    start >> example_dag_list >> end
+    example_dag_list >> report

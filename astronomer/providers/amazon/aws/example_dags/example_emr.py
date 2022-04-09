@@ -12,7 +12,7 @@ AWS_CONN_ID = os.getenv("ASTRO_AWS_CONN_ID", "aws_default")
 JOB_ROLE_ARN = os.getenv("JOB_ROLE_ARN", "arn:aws:iam::012345678912:role/emr_eks_default_role")
 
 default_args = {
-    "execution_timeout": timedelta(minutes=30),
+    "execution_timeout": timedelta(hours=5),
 }
 # [END howto_operator_emr_eks_env_variables]
 
