@@ -52,6 +52,17 @@ workflows:
             - Needs-Approval
           <<: *version_tag_only
 
+  nightly:
+    triggers:
+      - schedule:
+          cron: "0 19 * * *"
+          filters:
+            branches:
+              only:
+                - main
+    jobs:
+      - deploy
+
 executors:
   docker-executor:
     parameters:
@@ -97,6 +108,13 @@ jobs:
             - mypy-{{ .Branch }}-{{ checksum "setup.cfg" }}-{{ checksum "/home/circleci/.pyenv/version" }}
             - mypy-main-{{ checksum "setup.cfg" }}-{{ checksum "/home/circleci/.pyenv/version" }}
       - run:
+          name: Install Dependencies for sasl
+          command: |
+            sudo apt-get install -y --no-install-recommends build-essential
+            sudo apt-get update
+            sudo apt-get upgrade
+            sudo apt-get install libsasl2-dev
+      - run:
           name: Install Dependencies
           command: pip install -U -e .[all,mypy]
       - run:
@@ -121,6 +139,13 @@ jobs:
           keys:
             - docs-{{ .Branch }}-{{ checksum "setup.cfg" }}-{{ checksum ".readthedocs.yaml" }}
             - docs-main-{{ checksum "setup.cfg" }}-{ checksum ".readthedocs.yaml" }}
+      - run:
+          name: Install Dependencies for sasl
+          command: |
+            sudo apt-get install -y --no-install-recommends build-essential
+            sudo apt-get update
+            sudo apt-get upgrade
+            sudo apt-get install libsasl2-dev
       - run:
           name: Install Dependencies
           command: pip install -U -e .[all,docs,mypy]
@@ -152,6 +177,13 @@ jobs:
           keys:
             - deps-{{ .Branch }}-{{ checksum "setup.cfg" }}-{{ checksum "/home/circleci/.pyenv/version" }}
             - deps-main-{{ checksum "setup.cfg" }}-{{ checksum "/home/circleci/.pyenv/version" }}
+      - run:
+          name: Install Dependencies for sasl
+          command: |
+            sudo apt-get install -y --no-install-recommends build-essential
+            sudo apt-get update
+            sudo apt-get upgrade
+            sudo apt-get install libsasl2-dev
       - run:
           name: Install Dependencies
           command: pip install -U -e .[all,tests]
@@ -215,3 +247,17 @@ jobs:
       - store_artifacts:
           path: /tmp/workspace/dist/
           destination: dist
+
+  deploy:
+    executor:
+      name: docker-executor
+      python_version: "3.9"
+    steps:
+      - checkout
+      - setup_remote_docker:
+          version: 20.10.12
+      - run:
+          name: Deploy
+          command: |
+            cd .circleci/integration-tests
+            bash script.sh $DEPLOYMENT_INSTANCE $ASTRO_BASE_DOMAIN $ASTRO_RELEASE_NAME $ASTRO_API_KEY
