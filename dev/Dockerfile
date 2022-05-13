@@ -39,7 +39,7 @@ RUN echo $(ls -lrt /usr/local)
 ENV AIRFLOW__CORE__SECURITY kerberos
 ENV AIRFLOW__KERBEROS__KEYTAB /usr/local/airflow/dags/airflow.keytab
 
-
+RUN pip install 'apache-airflow[kerberos]'
 ##################### Hive ###################
 
 
