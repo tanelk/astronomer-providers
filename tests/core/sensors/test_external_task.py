@@ -11,16 +11,12 @@ from astronomer.providers.core.triggers.external_task import (
     TaskStateTrigger,
 )
 
-DEFAULT_DATE = datetime(2015, 1, 1)
-TEST_TASK_ID = "external_task_sensor_check"
-TEST_RUN_ID = "unit_test_dag_run_id"
-TEST_EXT_DAG_ID = "wait_for_me_dag"  # DAG the external task sensor is waiting on
-TEST_EXT_TASK_ID = "wait_for_me_task"  # Task the external task sensor is waiting on
-TEST_STATES = ["success", "fail"]
-TEST_POLL_INTERVAL = 3.0
-
 
 class TestExternalTaskSensorAsync:
+    TASK_ID = "external_task_sensor_check"
+    EXTERNAL_DAG_ID = "wait_for_me_dag"  # DAG the external task sensor is waiting on
+    EXTERNAL_TASK_ID = "wait_for_me_task"  # Task the external task sensor is waiting on
+
     def test_defer_and_fire_task_state_trigger(self, dag, context):
         """
         Asserts that a task is deferred and an TaskStateTrigger will be fired
@@ -28,9 +24,9 @@ class TestExternalTaskSensorAsync:
         (i.e. including the external_task_id).
         """
         sensor = ExternalTaskSensorAsync(
-            task_id=TEST_TASK_ID,
-            external_task_id=TEST_EXT_TASK_ID,
-            external_dag_id=TEST_EXT_DAG_ID,
+            task_id=self.TASK_ID,
+            external_task_id=self.EXTERNAL_TASK_ID,
+            external_dag_id=self.EXTERNAL_DAG_ID,
             dag=dag,
         )
 
@@ -41,13 +37,13 @@ class TestExternalTaskSensorAsync:
 
     def test_defer_and_fire_dag_state_trigger(self, dag, context):
         """
-        Asserts that a task is deferred and an DagStateTrigger will be fired
+        Asserts that a DAG is deferred and a DagStateTrigger will be fired
         when the ExternalTaskSensor is provided with all required arguments
-        (i.e. including the external_task_id).
+        (i.e. excluding the external_task_id).
         """
         sensor = ExternalTaskSensorAsync(
-            task_id=TEST_TASK_ID,
-            external_dag_id=TEST_EXT_DAG_ID,
+            task_id=self.TASK_ID,
+            external_dag_id=self.EXTERNAL_DAG_ID,
             dag=dag,
         )
         with pytest.raises(TaskDeferred) as exc:
@@ -55,15 +51,15 @@ class TestExternalTaskSensorAsync:
 
         assert isinstance(exc.value.trigger, DagStateTrigger), "Trigger is not a DagStateTrigger"
 
-    def test_defer_and_fire_dag_state_trigger_falsy(self, dag, context):
+    def test_task_defer_when_external_task_id_empty(self, dag, context):
         """
-        Asserts that the a DagStateTrigger will be fired when the sensor
+        Asserts that the DagStateTrigger will be fired when the sensor
         is provided with a falsy value for external_task_id rather than None.
         """
         sensor = ExternalTaskSensorAsync(
-            task_id=TEST_TASK_ID,
+            task_id=self.TASK_ID,
             external_task_id="",  # This is a falsy empty string
-            external_dag_id=TEST_EXT_DAG_ID,
+            external_dag_id=self.EXTERNAL_DAG_ID,
             dag=dag,
         )
 
@@ -73,16 +69,16 @@ class TestExternalTaskSensorAsync:
         assert isinstance(exc.value.trigger, DagStateTrigger), "Trigger is not a DagStateTrigger"
 
     @mock.patch("astronomer.providers.core.sensors.external_task.ExternalTaskSensorAsync.get_count")
-    def test_execute_complete_throws_exception(self, mocked_count, session, dag, context):
+    def test_execute_complete_when_external_task_fail(self, mocked_count, session, dag, context):
         """
         Asserts that the correct exception is raised when not every task monitored by
         the sensor is executed successfully.
         """
         mocked_count.return_value = 0
         sensor = ExternalTaskSensorAsync(
-            task_id=TEST_TASK_ID,
-            external_task_id=TEST_EXT_TASK_ID,
-            external_dag_id=TEST_EXT_DAG_ID,
+            task_id=self.TASK_ID,
+            external_task_id=self.EXTERNAL_TASK_ID,
+            external_dag_id=self.EXTERNAL_DAG_ID,
             dag=dag,
         )
 
@@ -92,15 +88,15 @@ class TestExternalTaskSensorAsync:
         assert str(exc.value) == "The external task wait_for_me_task in DAG wait_for_me_dag failed."
 
     @mock.patch("astronomer.providers.core.sensors.external_task.ExternalTaskSensorAsync.get_count")
-    def test_execute_complete_throws_exception1(self, mocked_count, session, dag, context):
+    def test_execute_complete_when_external_dag_fail(self, mocked_count, session, dag, context):
         """
         Asserts that the correct exception is raised when not every DAG monitored by
         the sensor is executed successfully.
         """
         mocked_count.return_value = 0
         sensor = ExternalTaskSensorAsync(
-            external_dag_id=TEST_EXT_DAG_ID,
-            task_id=TEST_TASK_ID,
+            task_id=self.TASK_ID,
+            external_dag_id=self.EXTERNAL_DAG_ID,
             dag=dag,
         )
 
@@ -116,8 +112,8 @@ class TestExternalTaskSensorAsync:
         argument is provided.
         """
         sensor = ExternalTaskSensorAsync(
-            external_dag_id=TEST_EXT_DAG_ID,
-            task_id=TEST_TASK_ID,
+            task_id=self.TASK_ID,
+            external_dag_id=self.EXTERNAL_DAG_ID,
             dag=dag,
         )
 
