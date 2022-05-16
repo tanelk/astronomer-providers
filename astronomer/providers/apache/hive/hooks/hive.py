@@ -30,7 +30,7 @@ class HiveCliHookAsync(BaseHook):
         """Makes a connection to the hive client using impyla library"""
         if conf.get("core", "security") == "kerberos":
             auth_mechanism = self.conn.extra_dejson.get("authMechanism", "GSSAPI")
-            kerberos_service_name = self.conn.extra_dejson.get("kerberos_service_name", "airflow")
+            kerberos_service_name = self.conn.extra_dejson.get("kerberos_service_name", "hive")
             return connect(
                 host=self.conn.host,
                 port=self.conn.port,
