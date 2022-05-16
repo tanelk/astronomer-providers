@@ -34,15 +34,14 @@ ENV HADOOP_CONF_DIR=/usr/local/hadoop/conf
 
 ENV PATH $PATH:$JAVA_HOME/bin:$HIVE_HOME:$HIVE_HOME/bin:$HADOOP_HOME:$HADOOP_HOME/bin:$SPARK_HOME:$SPARK_HOME/bin:$HADOOP_CONF_DIR
 
-
 RUN echo $(ls -lrt /usr/local)
 ENV AIRFLOW__CORE__SECURITY kerberos
 ENV AIRFLOW__KERBEROS__KEYTAB /usr/local/airflow/dags/airflow.keytab
+ENV AIRFLOW__KERBEROS__INCLUDE_IP False
 
 RUN pip install 'apache-airflow[kerberos]'
+
 ##################### Hive ###################
-
-
 
 COPY setup.cfg ${AIRFLOW_HOME}/astronomer_providers/setup.cfg
 COPY pyproject.toml ${AIRFLOW_HOME}/astronomer_providers/pyproject.toml
