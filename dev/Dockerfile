@@ -25,7 +25,6 @@ ENV JAVA_HOME=/usr/local/jdk1.8.0_202
 ADD ./hadoop-2.10.1.tar.gz /usr/local
 ADD ./apache-hive-2.3.9-bin.tar.gz /usr/local
 ADD ./krb5.conf /etc/krb5.conf
-# ADD ./providers_team_keypair.pem /usr/local
 
 COPY ./hive-site.xml /usr/local/apache-hive-2.3.9-bin/conf
 ENV HADOOP_HOME=/usr/local/hadoop-2.10.1
