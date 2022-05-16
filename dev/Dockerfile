@@ -8,6 +8,7 @@ RUN apt-get update \
         libsasl2-2 \
         libsasl2-dev \
         libsasl2-modules \
+        libsasl2-modules-gssapi-mit \
         libkrb5-dev \
         krb5-user \
         kinit \
